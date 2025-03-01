@@ -79,6 +79,19 @@
             font-size: 14px;
             color: #555;
         }
+
+        .settings {
+            margin-top: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .settings input, .settings select {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
     </style>
 </head>
 <body>
@@ -88,8 +101,21 @@
             <p>Drag & Drop images here or click to upload</p>
             <input type="file" id="imageInput" accept="image/*" multiple>
         </div>
-        <input type="text" id="pdfName" placeholder="Enter PDF name" style="margin-top: 10px;">
-        <input type="text" id="watermarkText" placeholder="Enter watermark text" style="margin-top: 10px;">
+        <div class="settings">
+            <input type="text" id="pdfName" placeholder="Enter PDF name">
+            <input type="text" id="watermarkText" placeholder="Enter watermark text">
+            <select id="orientation">
+                <option value="portrait">Portrait</option>
+                <option value="landscape">Landscape</option>
+            </select>
+            <select id="pageSize">
+                <option value="a4">A4</option>
+                <option value="letter">Letter</option>
+                <option value="a3">A3</option>
+            </select>
+            <input type="number" id="margin" placeholder="Margin (mm)" value="10">
+            <input type="password" id="pdfPassword" placeholder="PDF Password (optional)">
+        </div>
         <button id="convertBtn">Convert to PDF</button>
         <button id="resetBtn">Reset</button>
         <div id="loading">Converting... Please wait.</div>
@@ -110,6 +136,10 @@
             const loading = document.getElementById('loading');
             const pdfNameInput = document.getElementById('pdfName');
             const watermarkTextInput = document.getElementById('watermarkText');
+            const orientation = document.getElementById('orientation').value;
+            const pageSize = document.getElementById('pageSize').value;
+            const margin = parseInt(document.getElementById('margin').value, 10);
+            const pdfPassword = document.getElementById('pdfPassword').value;
 
             if (imageInput.files.length === 0) {
                 alert('Please select at least one image first.');
@@ -118,7 +148,12 @@
 
             loading.style.display = 'block'; // Tampilkan loading
 
-            const pdf = new jsPDF();
+            const pdf = new jsPDF({
+                orientation: orientation,
+                unit: 'mm',
+                format: pageSize
+            });
+
             let promises = [];
 
             Array.from(imageInput.files).forEach((file, index) => {
@@ -137,18 +172,18 @@
 
                             const imgData = canvas.toDataURL('image/png');
                             const imgProps = pdf.getImageProperties(imgData);
-                            const pdfWidth = pdf.internal.pageSize.getWidth();
+                            const pdfWidth = pdf.internal.pageSize.getWidth() - 2 * margin;
                             const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
 
                             if (index !== 0) pdf.addPage(); // Tambah halaman baru untuk gambar selanjutnya
-                            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+                            pdf.addImage(imgData, 'PNG', margin, margin, pdfWidth, pdfHeight);
 
                             // Tambah custom watermark
                             const watermarkText = watermarkTextInput.value.trim();
                             if (watermarkText) {
                                 pdf.setFontSize(40);
                                 pdf.setTextColor(150, 150, 150);
-                                pdf.text(watermarkText, 50, 100, { angle: 45 });
+                                pdf.text(watermarkText, pdfWidth / 2, pdfHeight / 2, { angle: 45, align: 'center' });
                             }
 
                             resolve();
@@ -160,6 +195,12 @@
             });
 
             await Promise.all(promises);
+
+            // Tambah password jika diisi
+            if (pdfPassword) {
+                pdf.setEncryption(pdfPassword);
+            }
+
             const pdfName = pdfNameInput.value.trim() || 'converted'; // Gunakan nama default jika kosong
             pdf.save(`${pdfName}.pdf`);
 
@@ -210,6 +251,7 @@
             imageInput.value = ''; // Kosongkan input file
             document.getElementById('pdfName').value = ''; // Kosongkan nama PDF
             document.getElementById('watermarkText').value = ''; // Kosongkan teks watermark
+            document.getElementById('pdfPassword').value = ''; // Kosongkan password
             document.getElementById('imageContainer').innerHTML = ''; // Hapus pratinjau gambar
         });
     </script>
