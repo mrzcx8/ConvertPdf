@@ -21,14 +21,19 @@
             padding: 20px;
             border-radius: 8px;
             box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            max-width: 600px;
+            width: 100%;
         }
 
         #imageContainer {
             margin-top: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
         }
 
         #imageContainer img {
-            max-width: 100%;
+            max-width: 200px;
             height: auto;
             border: 1px solid #ddd;
             border-radius: 4px;
@@ -48,53 +53,164 @@
         button:hover {
             background-color: #0056b3;
         }
+
+        #loading {
+            display: none;
+            margin-top: 20px;
+            color: #007bff;
+        }
+
+        #dropArea {
+            border: 2px dashed #007bff;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            cursor: pointer;
+            margin-bottom: 20px;
+        }
+
+        #dropArea p {
+            margin: 0;
+            color: #007bff;
+        }
+
+        .footer {
+            margin-top: 30px;
+            font-size: 14px;
+            color: #555;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Image to PDF Converter</h1>
-        <input type="file" id="imageInput" accept="image/*">
+        <div id="dropArea">
+            <p>Drag & Drop images here or click to upload</p>
+            <input type="file" id="imageInput" accept="image/*" multiple>
+        </div>
+        <input type="text" id="pdfName" placeholder="Enter PDF name" style="margin-top: 10px;">
+        <input type="text" id="watermarkText" placeholder="Enter watermark text" style="margin-top: 10px;">
         <button id="convertBtn">Convert to PDF</button>
+        <button id="resetBtn">Reset</button>
+        <div id="loading">Converting... Please wait.</div>
         <div id="imageContainer"></div>
+        <div class="footer">
+            Mr.Syah @ 2025 PDF Converter
+        </div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script>
-        document.getElementById('convertBtn').addEventListener('click', function() {
+        const { jsPDF } = window.jspdf;
+
+        document.getElementById('convertBtn').addEventListener('click', async function() {
             const imageInput = document.getElementById('imageInput');
             const imageContainer = document.getElementById('imageContainer');
+            const loading = document.getElementById('loading');
+            const pdfNameInput = document.getElementById('pdfName');
+            const watermarkTextInput = document.getElementById('watermarkText');
 
             if (imageInput.files.length === 0) {
-                alert('Please select an image first.');
+                alert('Please select at least one image first.');
                 return;
             }
 
-            const file = imageInput.files[0];
-            const reader = new FileReader();
+            loading.style.display = 'block'; // Tampilkan loading
 
-            reader.onload = function(e) {
-                const img = new Image();
-                img.src = e.target.result;
+            const pdf = new jsPDF();
+            let promises = [];
 
-                img.onload = function() {
-                    imageContainer.innerHTML = '';
+            Array.from(imageInput.files).forEach((file, index) => {
+                const reader = new FileReader();
+                const promise = new Promise((resolve) => {
+                    reader.onload = function(e) {
+                        const img = new Image();
+                        img.src = e.target.result;
+
+                        img.onload = function() {
+                            const canvas = document.createElement('canvas');
+                            const ctx = canvas.getContext('2d');
+                            canvas.width = img.width;
+                            canvas.height = img.height;
+                            ctx.drawImage(img, 0, 0);
+
+                            const imgData = canvas.toDataURL('image/png');
+                            const imgProps = pdf.getImageProperties(imgData);
+                            const pdfWidth = pdf.internal.pageSize.getWidth();
+                            const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+
+                            if (index !== 0) pdf.addPage(); // Tambah halaman baru untuk gambar selanjutnya
+                            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+
+                            // Tambah custom watermark
+                            const watermarkText = watermarkTextInput.value.trim();
+                            if (watermarkText) {
+                                pdf.setFontSize(40);
+                                pdf.setTextColor(150, 150, 150);
+                                pdf.text(watermarkText, 50, 100, { angle: 45 });
+                            }
+
+                            resolve();
+                        };
+                    };
+                    reader.readAsDataURL(file);
+                });
+                promises.push(promise);
+            });
+
+            await Promise.all(promises);
+            const pdfName = pdfNameInput.value.trim() || 'converted'; // Gunakan nama default jika kosong
+            pdf.save(`${pdfName}.pdf`);
+
+            loading.style.display = 'none'; // Sembunyikan loading
+        });
+
+        // Drag and Drop
+        const dropArea = document.getElementById('dropArea');
+        const imageInput = document.getElementById('imageInput');
+
+        dropArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropArea.style.backgroundColor = '#f0f8ff';
+        });
+
+        dropArea.addEventListener('dragleave', () => {
+            dropArea.style.backgroundColor = 'transparent';
+        });
+
+        dropArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropArea.style.backgroundColor = 'transparent';
+            imageInput.files = e.dataTransfer.files;
+            previewImages();
+        });
+
+        // Preview Gambar
+        imageInput.addEventListener('change', previewImages);
+
+        function previewImages() {
+            const imageContainer = document.getElementById('imageContainer');
+            imageContainer.innerHTML = ''; // Bersihkan pratinjau sebelumnya
+            Array.from(imageInput.files).forEach(file => {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const img = document.createElement('img');
+                    img.src = e.target.result;
+                    img.style.maxWidth = '200px';
+                    img.style.margin = '5px';
                     imageContainer.appendChild(img);
-
-                    html2canvas(imageContainer).then(canvas => {
-                        const imgData = canvas.toDataURL('image/png');
-                        const pdf = new jspdf.jsPDF();
-                        const imgProps = pdf.getImageProperties(imgData);
-                        const pdfWidth = pdf.internal.pageSize.getWidth();
-                        const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-
-                        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-                        pdf.save('converted.pdf');
-                    });
                 };
-            };
+                reader.readAsDataURL(file);
+            });
+        }
 
-            reader.readAsDataURL(file);
+        // Reset Form
+        document.getElementById('resetBtn').addEventListener('click', function() {
+            imageInput.value = ''; // Kosongkan input file
+            document.getElementById('pdfName').value = ''; // Kosongkan nama PDF
+            document.getElementById('watermarkText').value = ''; // Kosongkan teks watermark
+            document.getElementById('imageContainer').innerHTML = ''; // Hapus pratinjau gambar
         });
     </script>
 </body>
